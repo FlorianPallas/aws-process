@@ -1,56 +1,39 @@
 import sharp from 'sharp';
-import { registerFont, createCanvas } from 'canvas';
 import { readFile, writeFile } from 'fs/promises';
+import { textToCanvas } from './text-to-canvas';
 
 async function main() {
   const srcImg = await getImage();
   if (!srcImg) return;
 
-  const metadata = await sharp(srcImg).metadata();
+  const { width, height } = await sharp(srcImg).metadata();
+  if (!width || !height) throw new Error('Invalid image metadata');
 
-  const size = (metadata.width ?? 0) / 5;
-  const angle = (-45 * Math.PI) / 180;
-  const fontSize = 20;
-  const scale = 0.5;
-
-  const canvas = createCanvas(size, size, 'svg');
-  const ctx = canvas.getContext('2d');
-
-  ctx.strokeStyle = '#f00';
-  ctx.strokeRect(0, 0, size, size);
-
-  const text = '0123456789';
-  ctx.font = `regular ${fontSize}px Oswald`;
-  ctx.textAlign = 'center';
-
-  registerFont('./resources/Oswald-Light.ttf', { family: 'Oswald' });
-  const textMeasure = ctx.measureText(text);
-
-  const projectedOverhang = Math.abs(Math.cos(Math.PI / 2 - angle) * fontSize);
-  const projectedWidth = Math.abs(Math.cos(angle) * textMeasure.width);
-  const sizeToFit = projectedOverhang + projectedWidth;
-
-  const glyphSize =
-    textMeasure.actualBoundingBoxAscent - textMeasure.actualBoundingBoxDescent;
-
-  ctx.translate(size / 2, size / 2);
-  ctx.rotate(angle);
-  ctx.scale((size / sizeToFit) * scale, (size / sizeToFit) * scale);
-
-  ctx.strokeStyle = `rgba(0, 0, 0, 0.1)`;
-  ctx.strokeText(text, 0, glyphSize / 2);
-
-  ctx.fillStyle = `rgba(255, 255, 255, 0.8)`;
-  ctx.fillText(text, 0, glyphSize / 2);
+  const overlayImg = textToCanvas({
+    size: {
+      width: width / 5,
+      height: height / 5,
+    },
+    text: 'Example Text',
+    angle: -45,
+    scale: 0.75,
+    fontFamily: 'Oswald',
+    fillStyle: 'rgba(255, 255, 255, 1)',
+    strokeStyle: 'rgba(0, 0, 0, 0.5)',
+    /*
+    borderStyle: '#f00',
+    outerBoundsStyle: '#0f0',
+    innerBoundsStyle: '#00f',
+    */
+  }).toBuffer();
 
   const outImg = await sharp(srcImg)
     .blur(10)
     .composite([
       {
-        input: canvas.toBuffer(),
+        input: overlayImg,
         blend: 'overlay',
         tile: true,
-        gravity: 'northwest',
       },
     ])
     .toBuffer();
